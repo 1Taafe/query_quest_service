@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "User" ALTER COLUMN "course" DROP NOT NULL,
+ALTER COLUMN "group" DROP NOT NULL;
