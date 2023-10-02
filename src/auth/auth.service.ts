@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/prisma.service';
 import { SignupUserDto } from './dto/signup.user.dto';
@@ -23,9 +23,6 @@ export class AuthService {
   async login(email, password) {
     try {
       const user = await this.findOne(email);
-      // if (user?.password !== password) {
-      //   throw new BadRequestException('Неверные адрес электронной почты и/или пароль');
-      // }
       if (!(await argon2.verify(user?.password, password))) {
         throw new BadRequestException('Неверные адрес электронной почты и/или пароль');
       } 

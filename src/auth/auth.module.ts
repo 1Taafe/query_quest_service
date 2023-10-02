@@ -11,8 +11,8 @@ import { Constants } from './secrets';
     JwtModule.register({
       global: true,
       secret: Constants.jwtSecret,
-      signOptions: { expiresIn: '14d' },
-    }), ConfigModule
+      signOptions: { expiresIn: '1d' },
+    }),
   ],
   providers: [AuthService, PrismaService],
   controllers: [AuthController],

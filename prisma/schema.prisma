@@ -27,10 +27,27 @@ model User{
   group Int?
   role Role @relation(fields: [roleId], references: [id]) 
   roleId Int
+  olympics Olympics[]
 }
 
-// model Role{
-//   id Int @default(autoincrement()) @id
-//   name String
-//   users User[]
-// }
+model Olympics{
+  id Int @default(autoincrement()) @id
+  creator User @relation(fields: [creatorId], references: [id])
+  creatorId Int
+  name String
+  startTime DateTime
+  endTime DateTime
+  description String?
+  databaseScript String
+  image String?
+  tasks Task[]
+}
+
+model Task{
+  id Int @default(autoincrement()) @id
+  olympics Olympics @relation(fields: [olympicsId], references: [id])
+  olympicsId Int
+  title String
+  solution String
+  image String?
+}
