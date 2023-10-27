@@ -6,5 +6,6 @@ export class CreateOlympicsDto{
     readonly startTime: Date
     readonly endTime: Date
     readonly databaseScript: string
+    readonly databaseName: string
     readonly image?: string
 }

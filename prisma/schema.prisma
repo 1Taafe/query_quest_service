@@ -28,6 +28,7 @@ model User{
   role Role @relation(fields: [roleId], references: [id]) 
   roleId Int
   olympics Olympics[]
+  answers Answer[]
 }
 
 model Olympics{
@@ -38,6 +39,7 @@ model Olympics{
   startTime DateTime
   endTime DateTime
   description String?
+  databaseName String
   databaseScript String
   image String?
   tasks Task[]
@@ -45,9 +47,19 @@ model Olympics{
 
 model Task{
   id Int @default(autoincrement()) @id
-  olympics Olympics @relation(fields: [olympicsId], references: [id])
+  olympics Olympics @relation(fields: [olympicsId], references: [id], onDelete: Cascade)
   olympicsId Int
   title String
   solution String
   image String?
+  answers Answer[]
+}
+
+model Answer{
+  id Int @default(autoincrement()) @id
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  taskId Int
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId Int
+  script String
 }
