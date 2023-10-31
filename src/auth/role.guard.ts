@@ -27,13 +27,13 @@ export class RoleGuard implements CanActivate {
             request['user'] = payload;
             if (roles) {
                 if (!roles.includes(request.user.role)) {
-                    throw new UnauthorizedException();
+                    throw new UnauthorizedException('Отсутсвуют права для выполнения операции');
                 }
             }
         }
         catch (error) {
             console.log(error)
-            throw new UnauthorizedException();
+            throw new UnauthorizedException('Ошибка авторизации, недостаточно прав');
         }
         return true;
     }

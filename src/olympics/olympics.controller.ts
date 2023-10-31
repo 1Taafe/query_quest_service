@@ -1,4 +1,4 @@
-import {Body, Controller, Get, HttpCode, HttpStatus, Post, Delete, Request, UseGuards, Param, ParseIntPipe} from '@nestjs/common';
+import {Body, Controller, Get, Put, HttpStatus, Post, Delete, Request, UseGuards, Param, ParseIntPipe} from '@nestjs/common';
 import { OlympicsService } from './olympics.service';
 import { AuthGuard } from 'src/auth/auth.guard';
 import { CreateOlympicsDto } from './dto/CreateOlympicsDto';
@@ -6,6 +6,7 @@ import { RoleGuard } from 'src/auth/role.guard';
 import { Roles } from 'src/auth/role.decorator';
 import { Role } from 'src/auth/Role';
 import { CreateTaskDto } from './dto/CreateTaskDto';
+import { UpdateTaskDto } from './dto/UpdateTaskDto';
 
 
 @Controller('/olympics')
@@ -30,8 +31,13 @@ export class OlympicsController {
 
   @UseGuards(AuthGuard)
   @Get(':id/tasks')
-  async getOlympicsTasks(@Param('id', ParseIntPipe) id: number){
-    return this.olympicsService.getOlympicsTasks(id);
+  async getOlympicsTasks(@Request() request, @Param('id', ParseIntPipe) id: number){
+    if(request.user.role === Role.Organizer){
+      return this.olympicsService.getOlympicsTasks(id, request.user.sub);
+    }
+    else{
+      return this.olympicsService.getOlympicsTasksAsUser(id);
+    }
   }
 
   @UseGuards(RoleGuard)
@@ -47,6 +53,15 @@ export class OlympicsController {
   async createOlympicsTask(@Request() request, @Body() createTaskDto: CreateTaskDto){
     createTaskDto.creatorId = request.user.sub
     return this.olympicsService.createOlympicsTask(createTaskDto);
+  }
+
+  @UseGuards(RoleGuard)
+  @Roles(Role.Organizer)
+  @Put('/task/:taskId')
+  async updateOlympicsTask(@Request() request, @Param('taskId', ParseIntPipe) taskId: number, @Body() updateTaskDto: UpdateTaskDto){
+    updateTaskDto.id = taskId
+    updateTaskDto.creatorId = request.user.sub
+    return this.olympicsService.updateTask(updateTaskDto)
   }
 
   @UseGuards(AuthGuard)

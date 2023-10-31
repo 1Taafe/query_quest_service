@@ -3,6 +3,7 @@ import { PrismaService } from 'src/prisma.service';
 import { CreateOlympicsDto } from './dto/CreateOlympicsDto';
 import { CreateTaskDto } from './dto/CreateTaskDto';
 import { Client } from 'pg';
+import { UpdateTaskDto } from './dto/UpdateTaskDto';
 
 @Injectable()
 export class OlympicsService {
@@ -10,9 +11,37 @@ export class OlympicsService {
     private prisma: PrismaService
   ) { }
 
-  async getOlympicsTasks(olympicsId: number){
+  async getOlympicsTasksAsUser(olympicsId: number){
     try{
-      return await this.prisma.task.findMany({
+      const currentDate : Date = await this.getServerTime();
+      const currentTime = currentDate.getTime();
+      const olympics = await this.prisma.olympics.findUnique({
+        where: {
+          id: olympicsId
+        }
+      })
+      if(olympics.startTime.getTime() <= currentTime && olympics.endTime.getTime() >= currentTime){
+        return await this.prisma.task.findMany({
+          where: {
+            olympicsId: olympicsId
+          },
+          orderBy: {
+            id: 'asc'
+          }
+        })
+      }
+      else {
+        throw new BadRequestException('Задания недоступны до начала олимпиады')
+      }
+    }
+    catch(error){
+      throw new BadRequestException(error.message)
+    }
+  }
+
+  async getOlympicsTasks(olympicsId: number, userId: number){
+    try{
+      const tasks = await this.prisma.task.findMany({
         where: {
           olympicsId: olympicsId
         },
@@ -20,6 +49,24 @@ export class OlympicsService {
           id: 'desc'
         }
       })
+      const olympics = await this.prisma.olympics.findUnique({
+        where: {
+          id: olympicsId
+        }
+      })
+      if(olympics.creatorId === userId){
+        return tasks
+      }
+      else{
+        const filteredTasks = tasks.map(task => {
+          return {
+            ...task,
+            title: '<Задание скрыто>',
+            solution: '<Решение скрыто>'
+          }
+        })
+        return filteredTasks
+      }
     }
     catch(error){
       console.log(error.toString())
@@ -34,7 +81,7 @@ export class OlympicsService {
       }
     });
     if(createTaskDto.creatorId != olympics.creatorId){
-      throw new BadRequestException();
+      throw new BadRequestException('У вас нет прав для выполнения операции');
     }
     try{
       await this.prisma.task.create({
@@ -54,6 +101,39 @@ export class OlympicsService {
     }
   }
 
+  async updateTask(updateTaskDto: UpdateTaskDto){
+    try{
+      const task = await this.prisma.task.findUnique({
+        where: {
+          id: updateTaskDto.id
+        }
+      })
+      const olympics = await this.prisma.olympics.findUnique({
+        where: {
+          id: task.olympicsId
+        }
+      })
+      if(olympics.creatorId !== updateTaskDto.creatorId){
+        throw new BadRequestException('Отсутвуют права на изменение задания')
+      }
+      const updatedTask = await this.prisma.task.update({
+        where: {
+          id: updateTaskDto.id
+        },
+        data: {
+          title: updateTaskDto.title,
+          solution: updateTaskDto.solution
+        }
+      })
+      return {
+        message: 'Задание изменено'
+      }
+    }
+    catch(error){
+      throw new BadRequestException(error.message);
+    }
+  }
+
   async deleteTask(id: number, creatorId: number){
     const task = await this.prisma.task.findUnique({
       where: {
@@ -69,7 +149,7 @@ export class OlympicsService {
       }
     });
     if(creatorId != olympics.creatorId){
-      throw new BadRequestException();
+      throw new BadRequestException('У вас нет прав для выполнения операции');
     }
     try{
       await this.prisma.task.delete({
@@ -88,10 +168,11 @@ export class OlympicsService {
 
   async getPlannedOlympics(){
     try{
+      const currentDate = await this.getServerTime()
       const olympics = await this.prisma.olympics.findMany({
         where: {
           startTime: {
-            gte: new Date(),
+            gte: currentDate,
           }
         },
         include: {
@@ -116,13 +197,14 @@ export class OlympicsService {
 
   async getCurrentOlympics(){
     try{
+      const currentDate = await this.getServerTime()
       const olympics = await this.prisma.olympics.findMany({
         where: {
           startTime: {
-            gte: new Date(),
+            lte: currentDate,
           },
           endTime: {
-            lte: new Date()
+            gte: currentDate
           }
         },
         include: {
@@ -147,10 +229,11 @@ export class OlympicsService {
 
   async getFinishedOlympics(){
     try{
+      const currentDate = await this.getServerTime()
       const olympics = await this.prisma.olympics.findMany({
         where: {
           endTime: {
-            lte: new Date(),
+            lte: currentDate,
           }
         },
         include: {
@@ -195,7 +278,20 @@ export class OlympicsService {
         }
       })
       olympics.creator.password = '<hidden>'
-      return olympics
+      const currentDate : Date = await this.getServerTime();
+      const currentTime = currentDate.getTime();
+      if(olympics.startTime.getTime() <= currentTime && olympics.endTime.getTime() >= currentTime){
+        return {
+          ...olympics,
+          isAccessed: true
+        }
+      }
+      else{
+        return {
+          ...olympics,
+          isAccessed: false
+        }
+      }
     }
     catch(error){
       throw new BadRequestException(`Ошибка получения олимпиады с id = ${id}`)
@@ -310,7 +406,7 @@ export class OlympicsService {
         throw new NotAcceptableException('Не удалось удалить олимпиаду поскольку база данных используется в данный момент')
       }
       console.log(error)
-      throw new BadRequestException('Произошла ошибка при удалении олимпиады')
+      throw new BadRequestException(error.message)
     }
     finally{
       if(postgreClient !== undefined){
@@ -323,7 +419,7 @@ export class OlympicsService {
   async getServerTime(){
     try{
       let date = new Date();
-      return this.addHours(date, 3)
+      return await this.addHours(date, 3)
     }
     catch(error){
       throw new BadRequestException('Ошибка получения текущего времени')
