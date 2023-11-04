@@ -1,15 +1,215 @@
-import { BadRequestException, Injectable, NotAcceptableException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotAcceptableException, ServiceUnavailableException } from '@nestjs/common';
 import { PrismaService } from 'src/prisma.service';
 import { CreateOlympicsDto } from './dto/CreateOlympicsDto';
 import { CreateTaskDto } from './dto/CreateTaskDto';
 import { Client } from 'pg';
 import { UpdateTaskDto } from './dto/UpdateTaskDto';
+import { QueryDto } from './dto/QueryDto';
+import { json2csv } from 'json-2-csv';
+import { UserQueryDto } from './dto/UserQueryDto';
 
 @Injectable()
 export class OlympicsService {
   constructor(
     private prisma: PrismaService
   ) { }
+
+  async getUserAnswer(taskId: number, userId: number){
+    try{
+      const answer = await this.prisma.answer.findFirst({
+        where: {
+          taskId: taskId,
+          userId: userId,
+        }
+      })
+      return answer
+    }
+    catch(error){
+      throw new BadRequestException(error.message)
+    }
+  }
+
+  async executeQueryAsUser(userQueryDto: UserQueryDto){
+    let postgreClient
+    try{
+      for(const command of ['create', 'alter', 'drop', 'insert', 'update', 'delete']){
+        if(userQueryDto.query.includes(command)){
+          throw new BadRequestException('Выполнение данной команды недоступно')
+        }
+      }
+      const task = await this.prisma.task.findUnique({
+        where: {
+          id:userQueryDto.taskId
+        }
+      })
+      const olympics = await this.prisma.olympics.findUnique({
+        where: {
+          id: task.olympicsId
+        }
+      })
+      postgreClient = new Client({
+        host: 'localhost',
+        port: 5433,
+        database: olympics.databaseName,
+        user: 'postgres',
+        password: 'admin',
+      })
+      await postgreClient.connect();
+      const result = await postgreClient.query(userQueryDto.query);
+      const answer = await this.prisma.answer.findFirst({
+        where: {
+          userId: userQueryDto.userId,
+          taskId: userQueryDto.taskId,
+        }
+      })
+      const resultInCSV = json2csv(result.rows)
+      if(resultInCSV.includes(task.solution)){
+        if(answer === null){
+          await this.prisma.answer.create({
+            data: {
+              taskId: userQueryDto.taskId,
+              userId: userQueryDto.userId,
+              query: userQueryDto.query,
+              result: resultInCSV,
+              score: 1,
+              time: await this.getServerTime()
+            }
+          })
+        }
+        else{
+          await this.prisma.answer.update({
+            where: {
+              id: answer.id
+            },
+            data: {
+              taskId: userQueryDto.taskId,
+              userId: userQueryDto.userId,
+              query: userQueryDto.query,
+              result: resultInCSV,
+              score: 1,
+              time: await this.getServerTime()
+            }
+          })
+        }
+      }
+      else{
+        if(answer === null){
+          await this.prisma.answer.create({
+            data: {
+              taskId: userQueryDto.taskId,
+              userId: userQueryDto.userId,
+              query: userQueryDto.query,
+              result: resultInCSV,
+              score: 0,
+              time: await this.getServerTime()
+            }
+          })
+        }
+        else{
+          await this.prisma.answer.update({
+            where: {
+              id: answer.id
+            },
+            data: {
+              taskId: userQueryDto.taskId,
+              userId: userQueryDto.userId,
+              query: userQueryDto.query,
+              result: resultInCSV,
+              score: 0,
+              time: await this.getServerTime()
+            }
+          })
+        }
+      }
+      return {
+        message: 'Ответ сохранен'
+      }
+    }
+    catch(error){
+      console.log(error)
+      if(error.message.includes('connect')){
+        throw new ServiceUnavailableException('Отсутствует соединение с сервером базы данных')
+      }
+      throw new BadRequestException(error.message)
+    }
+    finally{
+      if(postgreClient !== undefined){
+        await postgreClient.end()
+      }
+    }
+  }
+
+  async executeQuery(queryDto: QueryDto){
+    let postgreClient
+    try{
+      for(const command of ['create', 'alter', 'drop', 'insert', 'update', 'delete']){
+        if(queryDto.query.includes(command)){
+          throw new BadRequestException('Выполнение данной команды недоступно')
+        }
+      }
+      const olympics = await this.prisma.olympics.findUnique({
+        where: {
+          id: queryDto.olympicsId
+        }
+      })
+      if(olympics.creatorId !== queryDto.userId){
+        throw new BadRequestException('У вас нет прав на выполнение операции')
+      }
+      postgreClient = new Client({
+        host: 'localhost',
+        port: 5433,
+        database: olympics.databaseName,
+        user: 'postgres',
+        password: 'admin',
+      })
+      await postgreClient.connect();
+      const result = await postgreClient.query(queryDto.query);
+      return {
+        result: json2csv(result.rows)
+      }
+    }
+    catch(error){
+      if(error.message.includes('connect')){
+        throw new ServiceUnavailableException('Отсутствует соединение с сервером базы данных')
+      }
+      throw new BadRequestException(error.message)
+    }
+    finally{
+      if(postgreClient !== undefined){
+        await postgreClient.end()
+      }
+    }
+  }
+
+  async getOlympicsTask(taskId: number){
+    try{
+      const task = await this.prisma.task.findUnique({
+        where: {
+          id: taskId
+        }
+      })
+      const olympics = await this.prisma.olympics.findUnique({
+        where: {
+          id: task.olympicsId
+        }
+      })
+      const currentTime = await this.getServerTime()
+      if(olympics.startTime.getTime() >= currentTime){
+        throw new BadRequestException('Задание невозможно получить до начала олимпиады')
+      }
+      task.solution = '<Решение скрыто>'
+      return task
+    }
+    catch(error){
+      const errorMessage : string = error.message.toString()
+      if(errorMessage.includes('начала')){
+        throw new BadRequestException('Задание невозможно получить до начала олимпиады')
+      }
+      else{
+        throw new BadRequestException('Ошибка при получении задания')
+      }
+    }
+  }
 
   async getOlympicsTasksAsUser(olympicsId: number){
     try{
@@ -271,7 +471,7 @@ export class OlympicsService {
     try{
       const olympics = await this.prisma.olympics.findUnique({
         where: {
-          id: id
+          id: id,
         },
         include: {
           creator: true

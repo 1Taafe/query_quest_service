@@ -61,5 +61,8 @@ model Answer{
   taskId Int
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId Int
-  script String
+  query String
+  result String
+  score Int
+  time DateTime
 }

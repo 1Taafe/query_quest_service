@@ -7,6 +7,8 @@ import { Roles } from 'src/auth/role.decorator';
 import { Role } from 'src/auth/Role';
 import { CreateTaskDto } from './dto/CreateTaskDto';
 import { UpdateTaskDto } from './dto/UpdateTaskDto';
+import { QueryDto } from './dto/QueryDto';
+import { UserQueryDto } from './dto/UserQueryDto';
 
 
 @Controller('/olympics')
@@ -27,6 +29,12 @@ export class OlympicsController {
   async deleteOlympics(@Param('id', ParseIntPipe) id: number, @Request() request,){
     const creatorId = request.user.sub
     return this.olympicsService.deleteOlympics(id, creatorId)
+  }
+
+  @UseGuards(AuthGuard)
+  @Get('/tasks/:id')
+  async getOlympicsTask(@Param('id', ParseIntPipe) taskId: number){
+    return this.olympicsService.getOlympicsTask(taskId);
   }
 
   @UseGuards(AuthGuard)
@@ -96,6 +104,39 @@ export class OlympicsController {
   @UseGuards(AuthGuard)
   @Get('/:id')
   async getOlympics(@Param('id', ParseIntPipe) id: number){
-    return this.olympicsService.getOlympicsById(id);
+    return this.olympicsService.getOlympicsById(id)
   }
+
+  @UseGuards(RoleGuard)
+  @Roles(Role.User)
+  @Get('/tasks/:id')
+  async getTaskById(@Param('id', ParseIntPipe) id: number){
+    return this.olympicsService.getOlympicsTask(id)
+  }
+
+  @UseGuards(RoleGuard)
+  @Roles(Role.User)
+  @Post('/tasks/:id/check')
+  async checkTask(@Param('id', ParseIntPipe) id: number, @Request() request,  @Body() userQueryDto: UserQueryDto){
+    userQueryDto.taskId = id
+    userQueryDto.userId = request.user.sub
+    return this.olympicsService.executeQueryAsUser(userQueryDto)
+  }
+
+  @UseGuards(RoleGuard)
+  @Roles(Role.User)
+  @Get('tasks/:id/answer')
+  async getAnswer(@Param('id', ParseIntPipe) id: number, @Request() request){
+    return this.olympicsService.getUserAnswer(id, request.user.sub)
+  }
+
+  @UseGuards(RoleGuard)
+  @Roles(Role.Organizer)
+  @Post('/:id')
+  async executeQuery(@Param('id', ParseIntPipe) id: number, @Request() request, @Body() queryDto: QueryDto){
+    queryDto.olympicsId = id
+    queryDto.userId = request.user.sub
+    return this.olympicsService.executeQuery(queryDto)
+  }
+
 }
