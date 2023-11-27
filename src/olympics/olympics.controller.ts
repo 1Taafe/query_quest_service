@@ -1,4 +1,4 @@
-import {Body, Controller, Get, Put, HttpStatus, Post, Delete, Request, UseGuards, Param, ParseIntPipe} from '@nestjs/common';
+import {Body, Controller, Get, Put, HttpStatus, Post, Delete, Request, UseGuards, Param, ParseIntPipe, Req} from '@nestjs/common';
 import { OlympicsService } from './olympics.service';
 import { AuthGuard } from 'src/auth/auth.guard';
 import { CreateOlympicsDto } from './dto/CreateOlympicsDto';
@@ -139,4 +139,22 @@ export class OlympicsController {
     return this.olympicsService.executeQuery(queryDto)
   }
 
+  @UseGuards(RoleGuard)
+  @Roles(Role.User, Role.Organizer)
+  @Get('/:id/results')
+  async getUserResults(@Param('id', ParseIntPipe) id: number, @Request() request){
+    if(request.user.role == Role.User){
+      return this.olympicsService.getResults(id, request.user.sub);
+    }
+    else if(request.user.role == Role.Organizer){
+      return this.olympicsService.getOrganizerResults(id);
+    }
+  }
+
+  @UseGuards(RoleGuard)
+  @Roles(Role.User)
+  @Get('/:id/answers')
+  async getUserAnswers(@Param('id', ParseIntPipe) id: number, @Request() request){
+    return this.olympicsService.getUserAnswers(id, request.user.sub)
+  }
 }

@@ -7,12 +7,109 @@ import { UpdateTaskDto } from './dto/UpdateTaskDto';
 import { QueryDto } from './dto/QueryDto';
 import { json2csv } from 'json-2-csv';
 import { UserQueryDto } from './dto/UserQueryDto';
+import { Role } from 'src/auth/Role';
 
 @Injectable()
 export class OlympicsService {
   constructor(
     private prisma: PrismaService
   ) { }
+
+  disabledSqlCommands = ['create', 'alter', 'drop', 'insert', 'update', 'delete', 'truncate', 'grant', 'revoke']
+
+  async getUserAnswers(olympicsId: number, userId: number){
+    try{
+      const answers = await this.prisma.answer.findMany({
+        where: {
+          task: {
+            olympicsId: olympicsId
+          },
+          userId: userId
+        }
+      })
+      return answers;
+    }
+    catch(error){
+      throw new BadRequestException(error.message)
+    }
+  }
+
+  async getOrganizerResults(olympicsId: number){
+    try{
+      const users = await this.prisma.user.findMany({
+        where: {
+          role: {
+            name: Role.User
+          }
+        }
+      })
+      const filteredUsers = users.map(user => {
+        return {
+          ...user,
+          password: '<hidden>'
+        }
+      })
+      const result = await this.prisma.answer.groupBy({
+        by: ['userId'],
+        _sum: { score: true },
+        _max: { time: true },
+        where: {
+          task: {
+            olympicsId: olympicsId,
+          },
+        },
+        orderBy: [
+          { _sum: { score: 'desc' } },
+          { _max: { time: 'asc' } },
+        ],
+      });
+      let index = 0;
+      let results = result.map((userResult) => {
+        index++
+        return {
+          ...userResult,
+          place: index,
+          user: filteredUsers.find(user => user.id == userResult.userId)
+        }
+      })
+      return results
+    }
+    catch(error){
+      throw new BadRequestException(error.message)
+    }
+  }
+
+  async getResults(olympicsId: number, userId: number){
+    try{
+      const result = await this.prisma.answer.groupBy({
+        by: ['userId'],
+        _sum: { score: true },
+        _max: { time: true },
+        where: {
+          task: {
+            olympicsId: olympicsId,
+          },
+        },
+        orderBy: [
+          { _sum: { score: 'desc' } },
+          { _max: { time: 'asc' } },
+        ],
+      });
+      let index = 0;
+      let results = result.map((userResult) => {
+        index++
+        return {
+          ...userResult,
+          place: index
+        }
+      })
+      const finalResult = results.find(result => result.userId == userId)
+      return finalResult
+    }
+    catch(error){
+      throw new BadRequestException(error.message)
+    }
+  }
 
   async getUserAnswer(taskId: number, userId: number){
     try{
@@ -32,7 +129,7 @@ export class OlympicsService {
   async executeQueryAsUser(userQueryDto: UserQueryDto){
     let postgreClient
     try{
-      for(const command of ['create', 'alter', 'drop', 'insert', 'update', 'delete']){
+      for(const command of this.disabledSqlCommands){
         if(userQueryDto.query.includes(command)){
           throw new BadRequestException('Выполнение данной команды недоступно')
         }
@@ -142,7 +239,7 @@ export class OlympicsService {
   async executeQuery(queryDto: QueryDto){
     let postgreClient
     try{
-      for(const command of ['create', 'alter', 'drop', 'insert', 'update', 'delete']){
+      for(const command of this.disabledSqlCommands){
         if(queryDto.query.includes(command)){
           throw new BadRequestException('Выполнение данной команды недоступно')
         }
@@ -469,6 +566,7 @@ export class OlympicsService {
 
   async getOlympicsById(id: number){
     try{
+      let isAccessed
       const olympics = await this.prisma.olympics.findUnique({
         where: {
           id: id,
@@ -481,15 +579,23 @@ export class OlympicsService {
       const currentDate : Date = await this.getServerTime();
       const currentTime = currentDate.getTime();
       if(olympics.startTime.getTime() <= currentTime && olympics.endTime.getTime() >= currentTime){
+        isAccessed = true
+      }
+      else{
+        isAccessed = false
+      }
+      if(olympics.endTime.getTime() <= currentTime){
         return {
           ...olympics,
-          isAccessed: true
+          isAccessed: isAccessed,
+          isFinished: true
         }
       }
       else{
         return {
           ...olympics,
-          isAccessed: false
+          isAccessed: isAccessed,
+          isFinished: false
         }
       }
     }
