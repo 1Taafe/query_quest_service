@@ -318,7 +318,7 @@ export class OlympicsService {
         }
       })
       if(olympics.startTime.getTime() <= currentTime && olympics.endTime.getTime() >= currentTime){
-        return await this.prisma.task.findMany({
+        const tasks = await this.prisma.task.findMany({
           where: {
             olympicsId: olympicsId
           },
@@ -326,6 +326,13 @@ export class OlympicsService {
             id: 'asc'
           }
         })
+        const filteredTasks = tasks.map(task => {
+          return {
+            ...task,
+            solution: '<Решение скрыто>'
+          }
+        })
+        return filteredTasks
       }
       else {
         throw new BadRequestException('Задания недоступны до начала олимпиады')
