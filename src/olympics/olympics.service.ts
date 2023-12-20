@@ -8,6 +8,7 @@ import { QueryDto } from './dto/QueryDto';
 import { json2csv } from 'json-2-csv';
 import { UserQueryDto } from './dto/UserQueryDto';
 import { Role } from 'src/auth/Role';
+import { UpdateOlympicsDto } from './dto/UpdateOlympicsDto';
 
 @Injectable()
 export class OlympicsService {
@@ -608,6 +609,35 @@ export class OlympicsService {
     }
     catch(error){
       throw new BadRequestException(`Ошибка получения олимпиады с id = ${id}`)
+    }
+  }
+
+  async updateOlympics(updateOlympicsDto: UpdateOlympicsDto){
+    try{
+      const olympics = await this.prisma.olympics.findUnique({
+        where: {
+          id: updateOlympicsDto.id
+        }
+      });
+      if(olympics.creatorId != updateOlympicsDto.creatorId){
+        throw new BadRequestException('Невозможно изменить олимпиаду, поскольку вы не являетесь ее владельцем')
+      }
+      await this.prisma.olympics.update({
+        where: {
+          id: updateOlympicsDto.id
+        },
+        data: {
+          name: updateOlympicsDto.name,
+          description: updateOlympicsDto.description,
+          image: updateOlympicsDto.image
+        }
+      })
+      return {
+        message: "Олимпиада успешно изменена"
+      }
+    }
+    catch(error){
+      throw new BadRequestException(error.message)
     }
   }
 

@@ -9,6 +9,7 @@ import { CreateTaskDto } from './dto/CreateTaskDto';
 import { UpdateTaskDto } from './dto/UpdateTaskDto';
 import { QueryDto } from './dto/QueryDto';
 import { UserQueryDto } from './dto/UserQueryDto';
+import { UpdateOlympicsDto } from './dto/UpdateOlympicsDto';
 
 
 @Controller('/olympics')
@@ -21,6 +22,15 @@ export class OlympicsController {
   async createOlympics(@Request() request, @Body() createOlympicsDto: CreateOlympicsDto) {
     createOlympicsDto.creatorId = request.user.sub
     return this.olympicsService.createOlympics(createOlympicsDto)
+  }
+
+  @UseGuards(RoleGuard)
+  @Roles(Role.Organizer)
+  @Put('/:id')
+  async updateOlympics(@Param('id', ParseIntPipe) id: number, @Request() request, @Body() updateOlympicsDto: UpdateOlympicsDto){
+    updateOlympicsDto.id = id;
+    updateOlympicsDto.creatorId = request.user.sub
+    return this.olympicsService.updateOlympics(updateOlympicsDto)
   }
 
   @UseGuards(RoleGuard)
