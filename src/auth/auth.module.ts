@@ -5,6 +5,8 @@ import { AuthController } from './auth.controller';
 import { PrismaService } from 'src/prisma.service';
 import { ConfigModule } from '@nestjs/config';
 import { Constants } from './secrets';
+import { MailerService } from 'src/mailer/mailer.service';
+import { MailerModule } from 'src/mailer/mailer.module';
 
 @Module({
   imports: [
@@ -13,6 +15,7 @@ import { Constants } from './secrets';
       secret: Constants.jwtSecret,
       signOptions: { expiresIn: '1d' },
     }),
+    MailerModule
   ],
   providers: [AuthService, PrismaService],
   controllers: [AuthController],

@@ -1,17 +1,78 @@
-import { BadRequestException, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from 'src/prisma.service';
 import { SignupUserDto } from './dto/signup.user.dto';
 import { Role } from './Role'
 import { ProfileUserDto } from './dto/profile.user.dto';
 import * as argon2 from 'argon2';
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
+import { Cache } from 'cache-manager';
+import { ChangePasswordDto } from './dto/change.password.dto';
+import { MailerService } from 'src/mailer/mailer.service';
 
 @Injectable()
 export class AuthService {
   constructor(
     private jwtService: JwtService,
-    private prisma: PrismaService
+    private prisma: PrismaService,
+    private mailer: MailerService,
+    @Inject(CACHE_MANAGER) private cacheService: Cache,
   ) { }
+
+  async restorePasswordRequest(email: string){
+    try{
+      const user = await this.prisma.user.findFirst({
+        where: {
+          email: email
+        }
+      })
+      const restorePasswordCode = Math.floor(100000 + Math.random() * 900000);
+      await this.cacheService.set(user.email, restorePasswordCode)
+      await this.mailer.send('QueryQuest - Восстановление пароля', `Ваш код для восстановления пароля: ${restorePasswordCode}. Не передавайте его третьим лицам!`)
+      return {
+        "message": "Запрос успешно зарегистрирован"
+      }
+    }
+    catch(error){
+      throw new BadRequestException('Учетная запись с данным адресом не найдена')
+    }
+  }
+
+  async isRestoreCodeValid(email: string, code: string){
+    const restoreCode = await this.cacheService.get(email);
+    if(restoreCode == code){
+      return {
+        "message": "Код верный"
+      }
+    }
+    else{
+      throw new BadRequestException('Код неверный')
+    }
+  }
+
+  async restorePassword(changePasswordDto: ChangePasswordDto){
+    if(changePasswordDto.password.length < 8){
+      throw new BadRequestException('Пароль должен быть больше 8 символов')
+    }
+    if(await this.isRestoreCodeValid(changePasswordDto.email, changePasswordDto.code)){
+      await this.cacheService.del(changePasswordDto.email)
+      await this.prisma.user.update({
+        where: {
+          email: changePasswordDto.email
+        },
+        data: {
+          password: await argon2.hash(changePasswordDto.password)
+        }
+      })
+      return {
+        "message": 'Пароль был успешно изменен'
+      }
+    }
+    else{
+      throw new BadRequestException('Неверный код')
+    }
+    
+  }
 
   async checkToken(role: string){
     return {
@@ -71,6 +132,15 @@ export class AuthService {
   async signUp(signupUserDto: SignupUserDto): Promise<any> {
     try {
       const passwordHash = await argon2.hash(signupUserDto.password)
+      if(signupUserDto.surname.length <= 2 || signupUserDto.name.length <= 2 ){
+        throw new BadRequestException('Фамилия и имя должны быть больше 2 символов')
+      }
+      if(!await this.isEmailValid(signupUserDto.email)){
+        throw new BadRequestException('Неверный формат Email адреса')
+      }
+      if(signupUserDto.password.length < 8){
+        throw new BadRequestException('Пароль должен быть больше 8 символов')
+      }
       const user = await this.prisma.user.create({
         data: {
           email: signupUserDto.email,
@@ -108,8 +178,11 @@ export class AuthService {
       if(error.toString().includes('Unique constraint failed')){
         throw new BadRequestException('Пользователь с такими данными уже существует')
       }
+      else if(error.toString().includes('Email')){
+        throw new BadRequestException('Неверный формат Email адреса')
+      }
       else{
-        throw new BadRequestException('В запросе отсутствуют все данные для регистрации')
+        throw new BadRequestException(error.message)
       }
       
     }
@@ -122,6 +195,11 @@ export class AuthService {
       },
       include: { role: true },
     })
+  }
+
+  async isEmailValid(email: string) {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email);
   }
 
 }

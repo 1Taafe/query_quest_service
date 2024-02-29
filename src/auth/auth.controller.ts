@@ -1,10 +1,12 @@
-import {Body, Controller, Get, HttpCode, HttpStatus, Post, Request, UseGuards} from '@nestjs/common';
+import {Body, Controller, Get, HttpCode, HttpStatus, Post, Query, Request, UseGuards} from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { JwtService } from '@nestjs/jwt';
 import { LoginUserDto } from './dto/login.user.dto';
 import { SignupUserDto } from './dto/signup.user.dto';
 import { RoleGuard } from './role.guard';
 import { AuthGuard } from './auth.guard';
+import { MailerService } from 'src/mailer/mailer.service';
+import { ChangePasswordDto } from './dto/change.password.dto';
 
 @Controller('/auth')
 export class AuthController {
@@ -22,6 +24,21 @@ export class AuthController {
     return signupUser;
   }
 
+  @Get('restorePasswordRequest')
+  async restorePasswordRequest(@Query('email') email: string){
+    return await this.authService.restorePasswordRequest(email);
+  }
+
+  @Get('checkRestoreCode')
+  async checkRestoreCode(@Query('email') email: string, @Query('code') code: string){
+    return await this.authService.isRestoreCodeValid(email, code)
+  }
+
+  @Post('restorePassword')
+  async restorePasswotd(@Body() changePasswordDto: ChangePasswordDto ){
+    return await this.authService.restorePassword(changePasswordDto)
+  }
+
   @UseGuards(AuthGuard)
   @Get('/checkToken')
   async checkToken(@Request() req){
@@ -33,36 +50,5 @@ export class AuthController {
   async getProfile(@Request() req) {
     return await this.authService.getUserProfile(req.user.sub);
   }
-
-//   @Post('/register')
-//   async register(@Body() createUserDto: CreateUserDto){
-//     createUserDto.role = 'passenger'
-//     createUserDto.company = 'None'
-//     const createdUser = await this.authService.createUser(createUserDto);
-//     return createdUser;
-//   }
-
-//   @UseGuards(RoleGuard)
-//   @Roles('admin', 'manager')
-//   @Post('/createDriver')
-//   async createDriver(@Body() createUserDto: CreateUserDto){
-//     const createdUser = await this.authService.createUser(createUserDto);
-//     return createdUser;
-//   }
-
-//   @UseGuards(RoleGuard)
-//   @Roles('admin')
-//   @Post('/createUser')
-//   async createUser(@Body() createUserDto: CreateUserDto){
-//     const createdUser = await this.authService.createUser(createUserDto);
-//     return createdUser;
-//   }
-
-  // @UseGuards(RoleGuard)
-  // @Roles('admin')
-  // @Get('profile')
-  // getProfile(@Request() req) {
-  //   return req.user;
-  // }
 
 }
